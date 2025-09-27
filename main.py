@@ -58,12 +58,6 @@ def root(request: Request, db: Session = Depends(get_db)):
         f"&scope={SCOPE}&access_type=offline&prompt=consent"
     )
 
-    # response = RedirectResponse(login_url)
-    # response.set_cookie(
-    #     key="oauth_state",
-    #     value=state)
-    # return response
-
     response = templates.TemplateResponse(
         "index.html",
         {
@@ -76,7 +70,7 @@ def root(request: Request, db: Session = Depends(get_db)):
         value=state)
     return response
 
-@app.get("/auth/google")#, response_class=HTMLResponse)
+@app.get("/auth/google")
 async def auth_google(request: Request, state:str, code: str, db: Session = Depends(get_db)):
     cookie_state = request.cookies.get("oauth_state")
     if not cookie_state or cookie_state != state:
@@ -88,9 +82,6 @@ async def auth_google(request: Request, state:str, code: str, db: Session = Depe
         "redirect_uri": GOOGLE_REDIRECT_URI,
         "grant_type": "authorization_code",
     }
-
-    #request.args.get('replit_token', None)
-    #check if the token is present in incomi
 
     token_response = requests.post(GOOGLE_TOKEN_URL, data=data).json()
 
@@ -107,7 +98,6 @@ async def auth_google(request: Request, state:str, code: str, db: Session = Depe
     if not id_token:
         raise HTTPException(status_code=400, detail="No ID token returned")
 
-    # Validate ID token
     jwks_client = PyJWKClient(GOOGLE_JWKS_URL)
     signing_key = jwks_client.get_signing_key_from_jwt(id_token)
 
@@ -118,7 +108,7 @@ async def auth_google(request: Request, state:str, code: str, db: Session = Depe
         audience=GOOGLE_CLIENT_ID,
     )
 
-    # Fetch userinfo
+
     userinfo = requests.get(
         GOOGLE_USERINFO_URL,
         headers={"Authorization": f"Bearer {access_token}"}
@@ -152,22 +142,6 @@ async def auth_google(request: Request, state:str, code: str, db: Session = Depe
     cacheKey = email
     set_hash_key(hashKey, cacheKey, token_fetched_at)
 
-
-    # hashKey = "repliq:google:access_token"
-    # cacheKey = f"{userinfo.get("name")}"
-    # cachedAccess = get_hash_key(hashKey, cacheKey)
-
-    # return templates.TemplateResponse(
-    #     "success.html",
-    #     {
-    #         "request": request,
-    #         "claims": claims,
-    #         "userinfo": new_user,
-    #         "access_token": access_token,
-    #         "refresh_token": refresh_token,
-    #         "get_email_url": f"http://localhost:8000/gmail/messages/?access_token={access_token}"
-    #     }
-    # )
     repliq_token = create_custom_token(email)
 
     response = RedirectResponse("/dashboard")  # redirect to your dashboard
@@ -187,16 +161,7 @@ async def dashboard(request: Request):
         return RedirectResponse("/")
     user = get_current_user(repliq_token)
     email = user.sub
-    # hashKey = "repliq:google:access_token"
-    # cacheKey = email
-    # access_code = get_hash_key(hashKey, cacheKey)
-    # if is_google_token_expired(email):
-    #     access_code = refresh_google_access_token(email, db)
-    #     if not access_code:
-    #         return {"message": "An error occuered while trying to refresh token"}
 
-    # response = {"message": user, "access_code": access_code}
-    # return response
     return templates.TemplateResponse(
         "success.html",
         {
@@ -221,14 +186,8 @@ async def get_messages(request: Request, db: Session = Depends(get_db), max_resu
         if not access_code:
             return {"message": "An error occuered while trying to refresh token"}
 
-    # claims = jwt.decode(access_token, options={"verify_signature": False})
-    # expiry = claims["exp"]  # UNIX timestamp
-    # if time.time() > expiry:
-    #     access_token = refresh_access_token(refresh_token)
-
     headers = {"Authorization": f"Bearer {access_code}"}
     
-    # 1. List message IDs with a limit
     list_resp = requests.get(
         f"https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults={max_results}",
         headers=headers
@@ -240,7 +199,6 @@ async def get_messages(request: Request, db: Session = Depends(get_db), max_resu
     list_data = list_resp.json()
     messages = []
 
-    # 2. Fetch full message by ID
     for msg in list_data.get("messages", []):
         msg_id = msg["id"]
         msg_resp = requests.get(
@@ -288,29 +246,9 @@ async def get_messages(request: Request, db: Session = Depends(get_db), max_resu
 
     service = build("gmail", "v1", credentials=creds)
 
-    # Example: get list of threadIds first
-    # results = service.users().threads().list(userId="me", maxResults=50).execute()
-    # thread_ids = [t["id"] for t in results.get("threads", [])]
-    # print("thread_ids: ", thread_ids)
-
-    # batch = service.new_batch_http_request()
-    # for message_id in thread_ids:
-    #     batch.add(service.users().messages().get(userId="me", id=message_id), callback=handle_response)
-
-    # batch.execute() 
-
-    # Fetch details in batches of 25
-    # threads = fetch_threads_in_batches(service, thread_ids, batch_size=25)
-
-    # for tid, thread in threads.items():
-    #     print("Thread:", tid, "Messages:", len(thread["messages"]))
-    #print(results)
     result = fetch_my_replies(service, email)
     final_res = create_threads_preserve_breaks(result,email)
-    # print(len(result))
-    # for i in result:
-    #     print(type(i), i)
-    #     print("##\n##\n##\n##\n##\n##")
+
     writing_style = get_writing_style(final_res)
     style = models.writing_style(
         user_id = user.id,

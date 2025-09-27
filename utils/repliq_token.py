@@ -5,7 +5,7 @@ from . import pydantic_schema
 from fastapi import status, HTTPException
 
 
-SECRET_KEY = config.SECRET_KEY  # move to env var in production
+SECRET_KEY = config.SECRET_KEY
 ALGORITHM = config.ALGORITHM
 REPLIQ_TOKEN_EXPIRE_MINUTES = config.REPLIQ_TOKEN_EXPIRE_MINUTES
 

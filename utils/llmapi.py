@@ -3,11 +3,8 @@ import config
 import os
 import re
 
-# Configure your API key
-# Replace 'YOUR_API_KEY' with your actual Gemini API key
 os.environ["GEMINI_API_KEY"] = config.GEMINI_API_KEY
 
-# The client gets the API key from the environment variable `GEMINI_API_KEY`.
 def get_writing_style(messages):
     print("inside get writing style")
     client = genai.Client()
@@ -39,7 +36,6 @@ def extract_text_from_messages(messages:dict):
     return text
 
 def remove_extra_text_from_llm_response(text):
-    # Use regex to capture everything between --- markers
     match = re.search(r"---\s*(.*?)\s*---", text, re.DOTALL)
 
     if match:

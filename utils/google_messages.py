@@ -1,11 +1,7 @@
 import base64
-from bs4 import BeautifulSoup  # pip install beautifulsoup4
+from bs4 import BeautifulSoup
 
 def parse_message(msg):
-    """
-    Extract sender, subject, and body from Gmail API message.
-    Supports HTML emails by converting them to plain text.
-    """
     headers = msg.get("payload", {}).get("headers", [])
     header_dict = {h["name"]: h["value"] for h in headers}
 
@@ -21,21 +17,18 @@ def parse_message(msg):
             return base64.urlsafe_b64decode(data.encode()).decode()
         return ""
 
-    # Try text/plain first
     if "parts" in payload:
         for part in payload["parts"]:
             if part.get("mimeType") == "text/plain":
                 body = decode_part(part)
                 break
         else:
-            # fallback to HTML
             for part in payload["parts"]:
                 if part.get("mimeType") == "text/html":
                     html_content = decode_part(part)
                     body = BeautifulSoup(html_content, "html.parser").get_text()
                     break
     else:
-        # single part message
         mime_type = payload.get("mimeType", "")
         if mime_type == "text/plain":
             body = decode_part(payload)
@@ -43,7 +36,6 @@ def parse_message(msg):
             html_content = decode_part(payload)
             body = BeautifulSoup(html_content, "html.parser").get_text()
 
-    # Optional: clean up extra whitespace
     body = " ".join(body.split())
 
     return {
@@ -69,7 +61,6 @@ def get_plain_text(payload):
 import base64
 
 def extract_text_from_message(message):
-    #print(message)
     payload = message['payload']
     raw_text = get_plain_text(payload)
     return base64.urlsafe_b64decode(raw_text.encode('ASCII')).decode('utf-8')
@@ -77,9 +68,7 @@ def extract_text_from_message(message):
 import re
 
 def strip_quoted_text(text):
-    # remove lines starting with '>'
     text = re.sub(r'(^>.*$\n?)', '', text, flags=re.MULTILINE)
-    # remove lines like "On Tue, 3 Sep 2024, Naman Goel wrote:"
     text = re.sub(r'On .* wrote:', '', text)
     return text.strip()
 

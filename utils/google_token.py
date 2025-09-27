@@ -22,8 +22,6 @@ def is_google_token_expired(email: str) -> bool:
 
 def refresh_google_access_token(email: str, refresh_token: str, db: Session):
     try:
-        # user = db.query(models.user).filter(models.user.email == email).first()
-        # refresh_token = user.google_refresh_token
         data = {
             "client_id": config.GOOGLE_CLIENT_ID,
             "client_secret": config.GOOGLE_CLIENT_SECRET,
@@ -47,7 +45,7 @@ def refresh_google_access_token(email: str, refresh_token: str, db: Session):
         cacheKey = email
         set_hash_key(hashKey, cacheKey, token_fetched_at)
 
-        return access_token  # contains new access_token
+        return access_token
 
     except Exception as e:
         print("Exception occured: ", e)
