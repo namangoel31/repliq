@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi import FastAPI, Request, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 import requests
@@ -15,10 +15,11 @@ from utils.google_token import refresh_google_access_token, is_google_token_expi
 from utils.google_messages import parse_message, create_threads, create_threads_preserve_breaks
 from utils import database_models as models
 from utils.database import engine, get_db
-from utils.cacheProvider import get_hash_key, set_hash_key
+from utils.cacheProvider import get_hash_key, set_hash_key, set_set_key
 from utils.repliq_token import get_current_user, create_custom_token
-from utils.google_api import fetch_threads_in_batches, fetch_my_replies
+from utils.google_api import fetch_threads_in_batches, fetch_my_replies, save_draft
 from utils.llmapi import get_writing_style
+from utils.googlePubSub import create_watch_request, verify_incoming_request, decode_push_notification_data, handle_pubsub_notification
 
 models.Base.metadata.create_all(bind = engine)
 
@@ -231,35 +232,57 @@ async def get_messages(request: Request, db: Session = Depends(get_db), max_resu
         access_code = refresh_google_access_token(email, refresh_token, db)
         if not access_code:
             return {"message": "An error occuered while trying to refresh token"}
-        
-    creds = Credentials.from_authorized_user_info(
-        {
-            "client_id": GOOGLE_CLIENT_ID,
-            "client_secret": GOOGLE_CLIENT_SECRET,
-            "refresh_token": refresh_token,
-            "token": access_code,
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "scopes": ["https://www.googleapis.com/auth/gmail.readonly"]
-        }
-    )
-    print("creds fetched. making batch call")
+    
+    style = db.query(models.writing_style).filter(models.writing_style.user_id == user.id).first()
 
-    service = build("gmail", "v1", credentials=creds)
+    if not style:
+        creds = Credentials.from_authorized_user_info(
+            {
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "refresh_token": refresh_token,
+                "token": access_code,
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "scopes": ["https://www.googleapis.com/auth/gmail.readonly"]
+            }
+        )
+        print("creds fetched. making batch call")
 
-    result = fetch_my_replies(service, email)
-    final_res = create_threads_preserve_breaks(result,email)
+        service = build("gmail", "v1", credentials=creds)
 
-    writing_style = get_writing_style(final_res)
-    style = models.writing_style(
-        user_id = user.id,
-        style = writing_style,
-    )
-    db.add(style)
-    db.commit()
-    db.refresh(style)
+        result = fetch_my_replies(service, email)
+        final_res = create_threads_preserve_breaks(result,email)
+
+        writing_style = get_writing_style(final_res)
+        style = models.writing_style(
+            user_id = user.id,
+            style = writing_style,
+        )
+        db.add(style)
+        db.commit()
+        db.refresh(style)
 
     print(type("writing_style"))
     print(style)
+    create_watch_request(access_code, refresh_token)
+
+
+@app.post("/push")
+async def push(request: Request,  background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=403, detail="Missing or invalid Authorization header")
+
+    token = auth_header.split(" ")[1]
+    verify_incoming_request(token)
+
+    body = await request.json()
+    print("📩 Pub/Sub notification received:", body)
+    result = decode_push_notification_data(body)
+    print(result)
+    background_tasks.add_task(save_draft, db, result)
+
+    return {"status": "ok"}
 
 def handle_response(request_id, response, exception):
     if exception is None:

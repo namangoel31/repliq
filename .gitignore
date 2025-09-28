@@ -1,2 +1,5 @@
 /test3/config.py
 config.py
+service_account.json
+*/__pycache__/*
+__pycache__

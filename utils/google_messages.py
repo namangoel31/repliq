@@ -1,5 +1,6 @@
 import base64
 from bs4 import BeautifulSoup
+import re
 
 def parse_message(msg):
     headers = msg.get("payload", {}).get("headers", [])
@@ -57,15 +58,10 @@ def get_plain_text(payload):
         return payload['body'].get('data', '')
     return ""
 
-
-import base64
-
 def extract_text_from_message(message):
     payload = message['payload']
     raw_text = get_plain_text(payload)
     return base64.urlsafe_b64decode(raw_text.encode('ASCII')).decode('utf-8')
-
-import re
 
 def strip_quoted_text(text):
     text = re.sub(r'(^>.*$\n?)', '', text, flags=re.MULTILINE)
@@ -94,6 +90,7 @@ def clean_message_body(message):
     return result
 
 def create_threads_preserve_breaks(messages, email):
+    print(messages)
     threads = []
     thread = {}
     for message in messages:

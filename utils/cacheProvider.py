@@ -28,3 +28,19 @@ def get_hash_key(hash_name, field):
         return value
     except Exception as ex:
         print(ex)
+
+def set_set_key(set_name, value, ttl=3600):
+    try:
+        r = get_redis_connection()
+        pipeline = r.pipeline()
+        pipeline.sadd(set_name, value)
+
+        if not r.exists(set_name):
+            pipeline.expire(set_name, ttl)
+
+        results = pipeline.execute()
+        was_added = results[0]  
+        return was_added
+    except Exception as ex:
+        print(ex)
+        return -1

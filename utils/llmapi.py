@@ -21,7 +21,8 @@ def get_writing_style(messages):
                                             Specific Language & Punctuation, \
                                                 Greetings & Closings, \
                                                     Reply Behavior, and, \
-                                                        How the tone changes with respect to a received message."
+                                                        How the tone changes with respect to a received message.\
+                                                            The writing style part should be enclosed between ---"
     content = extract_text_from_messages(messages)
 
     response = client.models.generate_content(
@@ -36,6 +37,7 @@ def extract_text_from_messages(messages:dict):
     return text
 
 def remove_extra_text_from_llm_response(text):
+    print(text)
     match = re.search(r"---\s*(.*?)\s*---", text, re.DOTALL)
 
     if match:
@@ -45,12 +47,12 @@ def remove_extra_text_from_llm_response(text):
         print("No match found")
 
 
-def get_draft(writing_style, email):
+def get_draft(writing_style, email_message_text):
     prompt = "this is my writing style. I want you to draft possible responses for the email I received. The email is attached below.\
         Do not give any extra text or follow up questions that are not relavant to the email or the response. \
-            Your response should only contain text tfor the possible responses."
+            Your response should only contain text for the possible responses."
     
-    content = writing_style + "\n\n" + prompt + "\n\n" + email
+    content = writing_style + "\n\n" + prompt + "\n\n" + email_message_text
 
     client = genai.Client()
 
