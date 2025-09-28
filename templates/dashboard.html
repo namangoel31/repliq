@@ -1,20 +1,27 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Login Successful</title>
+    <title>Repliq: Login Successful</title>
 </head>
 <body>
-    <h1>Login Successful 🎉</h1>
+    <h1><b>Repliq: Your email assistant</b></h1>
+    <br>
+    <h2>Dashboard</h2>
     <p><b>Email:</b> {{ email }}</p>
 
     <p><b>Writing Style:</b> {{ writing_style }}</p>
     <a href="{{ get_writing_style_url }}">
-        <button>Refresh</button>
+        <button>Generate/Refresh</button>
     </a>
 
     <p><b>Watch Status:</b> {{ watch_status }}</p>
     <a href="{{ get_watch_status_url }}">
         <button>Enable/Disable</button>
+    </a>
+    <p> </p>
+    <br>
+    <a href="{{ logout_url }}">
+        <button>Revoke access & Logout</button>
     </a>
 </body>
 </html>

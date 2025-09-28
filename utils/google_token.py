@@ -46,7 +46,13 @@ def refresh_google_access_token(email: str, refresh_token: str, db: Session):
         set_hash_key(hashKey, cacheKey, token_fetched_at)
 
         return access_token
-
+    
+    except requests.exceptions.HTTPError as e:
+        print(f"Failed to refresh access token: {e}")
+        print("Response:", response.json())
+        return False
+    
     except Exception as e:
         print("Exception occured: ", e)
         return False
+    

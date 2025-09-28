@@ -13,6 +13,7 @@ class user(Base):
     google_refresh_token = Column(String, nullable = False)
     token_issued_at = Column(Integer, nullable = False)
     token_expires_in = Column(Integer, nullable = False, server_default = text('604799'))
+    watch_status = Column(Boolean, nullable = False, server_default = text('False'))
 
     created_at = Column (TIMESTAMP(timezone = True),
                          nullable = False,

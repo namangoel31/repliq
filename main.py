@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 import secrets
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
+from google.genai.errors import ServerError
 
 import config
 from utils.google_token import refresh_google_access_token, is_google_token_expired
@@ -19,7 +20,7 @@ from utils.cacheProvider import get_hash_key, set_hash_key, set_set_key
 from utils.repliq_token import get_current_user, create_custom_token
 from utils.google_api import fetch_threads_in_batches, fetch_my_replies, save_draft
 from utils.llmapi import get_writing_style
-from utils.googlePubSub import create_watch_request, verify_incoming_request, decode_push_notification_data, handle_pubsub_notification
+from utils.googlePubSub import create_watch_request, verify_incoming_request, decode_push_notification_data, handle_pubsub_notification, stop_watch_request
 
 models.Base.metadata.create_all(bind = engine)
 
@@ -134,6 +135,7 @@ async def auth_google(request: Request, state:str, code: str, db: Session = Depe
                      "name": name,
                      "google_refresh_token": refresh_token}
         user_obj_query.update(user_dict, synchronize_session = False)
+        db.commit()
 
     hashKey = "repliq:google:access_token"
     cacheKey = email
@@ -160,58 +162,82 @@ async def dashboard(request: Request, db: Session = Depends(get_db)):
     repliq_token = request.cookies.get("repliq_token")
     if not repliq_token:
         return RedirectResponse("/")
+
     user = get_current_user(repliq_token)
     email = user.sub
+    user_obj = db.query(models.user).filter(models.user.email == email).first()
 
+    if not refresh_google_access_token(email, user_obj.google_refresh_token, db):
+        response = RedirectResponse("/")  # redirect to your dashboard
+        response.delete_cookie("repliq_token")
+        return response
+
+
+    writing_style_obj = db.query(models.writing_style).filter(models.writing_style.user_id == user_obj.id).first()
+
+    watch_status = user_obj.watch_status
+    if writing_style_obj:
+        writing_style = writing_style_obj.style
+    else:
+        writing_style = "Not Found"
+
+    if not watch_status:
+        watch_status = "Disabled"
+    else:
+        watch_status = "Enabled: Sit back and let Repliq do it's magic."
     return templates.TemplateResponse(
         "dashboard.html",
         {
             "request": request,
             "email": email,
-            "get_email_url": f"http://localhost:8000/gmail/messages/batch"
+            "writing_style": writing_style,
+            "watch_status": watch_status,
+            "get_writing_style_url": f"http://localhost:8000/gmail/generate_writing_style",
+            "get_watch_status_url": f"http://localhost:8000/gmail/toggle_watch",
+            "logout_url": f"http://localhost:8000/gmail/logout"
         }
     )
 
-@app.get("/gmail/messages")
-async def get_messages(request: Request, db: Session = Depends(get_db), max_results: int = 10):
-    repliq_token = request.cookies.get("repliq_token")
-    if not repliq_token:
-        return RedirectResponse("/")
-    user = get_current_user(repliq_token)
-    email = user.sub
-    hashKey = "repliq:google:access_token"
-    cacheKey = email
-    access_code = get_hash_key(hashKey, cacheKey)
-    if is_google_token_expired(email):
-        access_code = refresh_google_access_token(email, db)
-        if not access_code:
-            return {"message": "An error occuered while trying to refresh token"}
+# @app.get("/gmail/messages")
+# async def get_messages(request: Request, db: Session = Depends(get_db), max_results: int = 10):
+#     repliq_token = request.cookies.get("repliq_token")
+#     if not repliq_token:
+#         return RedirectResponse("/")
+#     user = get_current_user(repliq_token)
+#     email = user.sub
+#     hashKey = "repliq:google:access_token"
+#     cacheKey = email
+#     access_code = get_hash_key(hashKey, cacheKey)
+#     if is_google_token_expired(email):
+#         access_code = refresh_google_access_token(email, db)
+#         if not access_code:
+#             return {"message": "An error occuered while trying to refresh token"}
 
-    headers = {"Authorization": f"Bearer {access_code}"}
+#     headers = {"Authorization": f"Bearer {access_code}"}
     
-    list_resp = requests.get(
-        f"https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults={max_results}",
-        headers=headers
-    )
+#     list_resp = requests.get(
+#         f"https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults={max_results}",
+#         headers=headers
+#     )
     
-    if list_resp.status_code != 200:
-        raise HTTPException(status_code=list_resp.status_code, detail=list_resp.json())
+#     if list_resp.status_code != 200:
+#         raise HTTPException(status_code=list_resp.status_code, detail=list_resp.json())
     
-    list_data = list_resp.json()
-    messages = []
+#     list_data = list_resp.json()
+#     messages = []
 
-    for msg in list_data.get("messages", []):
-        msg_id = msg["id"]
-        msg_resp = requests.get(
-            f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{msg_id}?format=full",
-            headers=headers
-        )
-        if msg_resp.status_code == 200:
-            messages.append(parse_message(msg_resp.json()))
+#     for msg in list_data.get("messages", []):
+#         msg_id = msg["id"]
+#         msg_resp = requests.get(
+#             f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{msg_id}?format=full",
+#             headers=headers
+#         )
+#         if msg_resp.status_code == 200:
+#             messages.append(parse_message(msg_resp.json()))
 
-    return {"messages": messages}
+#     return {"messages": messages}
 
-@app.get("/gmail/messages/batch")
+@app.get("/gmail/generate_writing_style")
 async def get_messages(request: Request, db: Session = Depends(get_db), max_results: int = 10):
     print("inside batch")
     repliq_token = request.cookies.get("repliq_token")
@@ -253,18 +279,46 @@ async def get_messages(request: Request, db: Session = Depends(get_db), max_resu
         result = fetch_my_replies(service, email)
         final_res = create_threads_preserve_breaks(result,email)
 
-        writing_style = get_writing_style(final_res)
-        style = models.writing_style(
-            user_id = user.id,
-            style = writing_style,
-        )
-        db.add(style)
-        db.commit()
-        db.refresh(style)
+        try:
+            writing_style = get_writing_style(final_res)
+            style = models.writing_style(
+                user_id = user.id,
+                style = writing_style,
+            )
+            db.add(style)
+            db.commit()
+            db.refresh(style)
+        except ServerError as ex:
+            print(ex)
 
-    print(type("writing_style"))
-    print(style)
-    create_watch_request(access_code, refresh_token, email)
+    return RedirectResponse("/dashboard")
+
+@app.get("/gmail/toggle_watch")
+def toggle_watch(request: Request, db: Session = Depends(get_db)):
+    repliq_token = request.cookies.get("repliq_token")
+    if not repliq_token:
+        return RedirectResponse("/")
+    
+    user = get_current_user(repliq_token)
+    email = user.sub
+
+    user = db.query(models.user).filter(models.user.email == email).first()
+    refresh_token = user.google_refresh_token
+
+    hashKey = "repliq:google:access_token"
+    cacheKey = email
+    access_code = get_hash_key(hashKey, cacheKey)
+
+    if is_google_token_expired(email):
+        access_code = refresh_google_access_token(email, refresh_token, db)
+        if not access_code:
+            return {"message": "An error occuered while trying to refresh token"}
+    if not user.watch_status:
+        create_watch_request(access_code, refresh_token, email, db)
+    else:
+        stop_watch_request(access_code, refresh_token, email, db)
+
+    return RedirectResponse("/dashboard")
 
 
 @app.post("/push")
@@ -277,12 +331,60 @@ async def push(request: Request,  background_tasks: BackgroundTasks, db: Session
     verify_incoming_request(token)
 
     body = await request.json()
+    if config.DRAIN_NOTIFICATIONS:
+        print("\nDiscarding incoming notification!\n")
     print("📩 Pub/Sub notification received:", body)
     result = decode_push_notification_data(body)
     print(result)
     background_tasks.add_task(save_draft, db, result)
 
     return {"status": "ok"}
+
+@app.get("/gmail/logout")
+def logout_and_revoke_token(request: Request, db: Session = Depends(get_db)):
+    repliq_token = request.cookies.get("repliq_token")
+    if not repliq_token:
+        return RedirectResponse("/")
+    
+    user = get_current_user(repliq_token)
+    email = user.sub
+
+    user = db.query(models.user).filter(models.user.email == email).first()
+    refresh_token = user.google_refresh_token
+
+    hashKey = "repliq:google:access_token"
+    cacheKey = email
+    access_code = get_hash_key(hashKey, cacheKey)
+
+    if is_google_token_expired(email):
+        access_code = refresh_google_access_token(email, refresh_token, db)
+        if not access_code:
+            response = RedirectResponse("/dashboard")
+            return response
+    if not user.watch_status:
+        pass
+    else:
+        stop_watch_request(access_code, refresh_token, email, db)
+
+    try:
+        response = requests.post(
+            "https://oauth2.googleapis.com/revoke",
+            params={"token": refresh_token},
+            headers={"content-type": "application/x-www-form-urlencoded"}
+        )
+        if response.status_code == 200:
+            print("Token revoked successfully.")
+            response = RedirectResponse("/")
+            response.delete_cookie("repliq_token")
+            return response
+        else:
+            print(f"Failed to revoke token: {response.status_code}, {response.text}")
+            response = RedirectResponse("/dashboard")
+            return response
+    except Exception as e:
+        print(f"Error revoking token: {e}")
+        response = RedirectResponse("/dashboard")
+        return response
 
 def handle_response(request_id, response, exception):
     if exception is None:

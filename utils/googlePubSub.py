@@ -15,7 +15,7 @@ from utils.google_messages import create_threads_preserve_breaks, parse_message
 from email.utils import parseaddr
 from googleapiclient.errors import HttpError
 
-def create_watch_request(token, refresh_token, email):
+def create_watch_request(token, refresh_token, email, db):
     creds = Credentials(
         token=token,
         refresh_token= refresh_token,
@@ -28,20 +28,45 @@ def create_watch_request(token, refresh_token, email):
 
     topic_name = config.PUBSUB_TOPIC_NAME
 
-    VERIFICATION_TOKEN = "my-secret-token-123"
+    GMAIL_WATCH_VERIFICATION_TOKEN = config.GMAIL_WATCH_VERIFICATION_TOKEN
 
     watch_request = {
         "labelIds": ["INBOX"],
         "topicName": topic_name,
         "labelFilterAction": "INCLUDE",
-        "token": VERIFICATION_TOKEN
+        "token": GMAIL_WATCH_VERIFICATION_TOKEN
     }
+
+    user_obj_query = db.query(models.user).filter(models.user.email == email)
+    user_dict = {"watch_status": True}
+    user_obj_query.update(user_dict, synchronize_session = False)
+    db.commit()
 
     response = service.users().watch(userId="me", body=watch_request).execute()
     hashKey = "repliq:google:history_id"
     cacheKey = email
     set_hash_key(hashKey, cacheKey, response['historyId'])
     print("Watch started:", response)
+
+def stop_watch_request(token, refresh_token, email, db):
+    creds = Credentials(
+        token=token,
+        refresh_token= refresh_token,
+        client_id= config.GOOGLE_CLIENT_ID,
+        client_secret= config.GOOGLE_CLIENT_SECRET,
+        token_uri="https://oauth2.googleapis.com/token"
+    )
+
+    service = build('gmail', 'v1', credentials=creds)
+    response = service.users().stop(userId="me").execute()
+
+    user_obj_query = db.query(models.user).filter(models.user.email == email)
+    user_dict = {"watch_status": False}
+    user_obj_query.update(user_dict, synchronize_session = False)
+    db.commit()
+
+    print("Watch stopped: ", response)
+
 
 google_certs = {}
 
