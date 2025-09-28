@@ -15,7 +15,7 @@ from utils.google_messages import create_threads_preserve_breaks, parse_message
 from email.utils import parseaddr
 from googleapiclient.errors import HttpError
 
-def create_watch_request(token, refresh_token):
+def create_watch_request(token, refresh_token, email):
     creds = Credentials(
         token=token,
         refresh_token= refresh_token,
@@ -38,6 +38,9 @@ def create_watch_request(token, refresh_token):
     }
 
     response = service.users().watch(userId="me", body=watch_request).execute()
+    hashKey = "repliq:google:history_id"
+    cacheKey = email
+    set_hash_key(hashKey, cacheKey, response['historyId'])
     print("Watch started:", response)
 
 google_certs = {}

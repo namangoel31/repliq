@@ -156,7 +156,7 @@ async def auth_google(request: Request, state:str, code: str, db: Session = Depe
     return response
 
 @app.get("/dashboard")
-async def dashboard(request: Request):
+async def dashboard(request: Request, db: Session = Depends(get_db)):
     repliq_token = request.cookies.get("repliq_token")
     if not repliq_token:
         return RedirectResponse("/")
@@ -164,7 +164,7 @@ async def dashboard(request: Request):
     email = user.sub
 
     return templates.TemplateResponse(
-        "success.html",
+        "dashboard.html",
         {
             "request": request,
             "email": email,
@@ -264,7 +264,7 @@ async def get_messages(request: Request, db: Session = Depends(get_db), max_resu
 
     print(type("writing_style"))
     print(style)
-    create_watch_request(access_code, refresh_token)
+    create_watch_request(access_code, refresh_token, email)
 
 
 @app.post("/push")
