@@ -7,7 +7,6 @@ import logging
 
 app_name = config.APP_NAME
 logger = logging.getLogger(app_name)
-#logger.info("Valid Repliq token present in request. Redirecting to dashboard.", extra={"path": method_name})
 
 SECRET_KEY = config.SECRET_KEY
 ALGORITHM = config.ALGORITHM

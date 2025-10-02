@@ -18,7 +18,6 @@ import logging
 
 app_name = config.APP_NAME
 logger = logging.getLogger(app_name)
-#logger.info("Valid Repliq token present in request. Redirecting to dashboard.", extra={"path": method_name})
 
 def create_watch_request(token, refresh_token, email, db):
     method_name = "create_watch_request"
@@ -53,8 +52,6 @@ def create_watch_request(token, refresh_token, email, db):
     hashKey = "repliq:google:history_id"
     cacheKey = email
     set_hash_key(hashKey, cacheKey, response['historyId'])
-
-    #print("Watch started:", response)
     logger.info("processing ends.", extra={"path": method_name})
 
 def stop_watch_request(token, refresh_token, email, db):
@@ -76,8 +73,6 @@ def stop_watch_request(token, refresh_token, email, db):
     user_dict = {"watch_status": False}
     user_obj_query.update(user_dict, synchronize_session = False)
     db.commit()
-
-    #print("Watch stopped: ", response)
     logger.info("processing ends.", extra={"path": method_name})
 
 
@@ -122,7 +117,6 @@ def verify_incoming_request(token):
             except jwt.exceptions.InvalidSignatureError:
                 continue
             except Exception as e:
-                #print(f"Skipping cert {key_id}: {e}")
                 continue
 
         if not decoded_token:
@@ -131,11 +125,9 @@ def verify_incoming_request(token):
             raise Exception(msg)
         
         logger.info("processing ends. JWT verified", extra={"path": method_name})
-        #print("JWT verified:", decoded_token)
 
     except Exception as e:
         logger.exception("processing ends with an exception %s", e, extra = {"path": method_name})
-        #print("JWT verification failed:", e)
         raise HTTPException(status_code=403, detail="JWT verification failed")
 
 
@@ -144,7 +136,6 @@ def decode_push_notification_data(pubsub_message):
     logger.info("processing begins.", extra={"path": method_name})
     data = base64.urlsafe_b64decode(pubsub_message["message"]["data"]).decode("utf-8")
     decoded = json.loads(data)
-    #print("Decoded Pub/Sub data:", decoded)
 
     email_address = decoded["emailAddress"]
     history_id = decoded["historyId"]
@@ -174,12 +165,6 @@ def handle_pubsub_notification(db: Session, result, service):
     ).execute()
 
     if "history" not in history:
-        #print("from goolePubSub.py: No new messages.")
-        # hashKey = "repliq:google:history_id"
-        # cacheKey = email
-        # value = history_id
-        # set_hash_key(hashKey, cacheKey, value)
-        #print("returning from no history block")
         logger.info("processing ends with no new message.", extra={"path": method_name})
         return None
     
@@ -188,7 +173,6 @@ def handle_pubsub_notification(db: Session, result, service):
         if "messagesAdded" in record:
             for msg in record["messagesAdded"]:
                 msg_id = msg["message"]["id"]
-                #print("messageId: ", msg_id)
                 try:
                     message = service.users().messages().get(
                         userId=email,
@@ -196,34 +180,21 @@ def handle_pubsub_notification(db: Session, result, service):
                         format="full"
                     ).execute()
                 except HTTPException as ex:
-                    #print(ex)
                     logger.exception("An exception occured while going through message history: %s", str(ex), extra={"path": method_name})
                     continue
                 except HttpError as ex:
-                    #print(ex)
                     logger.exception("An exception occured while going through message history: %s", str(ex), extra={"path": method_name})
                     continue                    
                 headers = {h['name']: h['value'] for h in message['payload']['headers']}
-                #print(headers)
                 sender_email = parseaddr(headers.get('from'))[1]
-                #print("############################", sender_email)
 
                 if sender_email == email:
-                    #print("Skipping my own message:", msg_id)
                     continue
-
                 body_text = parse_message(message)['body']
-                #print("New message snippet:", message.get("snippet"))
-                #print("Full message ID:", message["id"])
                 logger.info("New message ID and snippet: %s: %s", message['id'], message.get("snippet"), extra={"path": method_name})
                 if check_duplicate(message["id"], email):
-                    #print("returning from handle_pubsub_notification, check duplicate block")
                     logger.info("processing ends. Duplicate message.", extra={"path": method_name})
                     return
-    # hashKey = "repliq:google:history_id"
-    # cacheKey = email
-    # value = history_id
-    # set_hash_key(hashKey, cacheKey,value)
     if body_text:
         logger.info("processing ends.", extra={"path": method_name})
         return {"original_msg": message, "body_text": body_text}
@@ -235,8 +206,6 @@ def check_duplicate(message_id, email):
     logger.info("processing begins.", extra={"path": method_name})
     set_name = f"repliq:google:message_id:{email}"
     duplicate = set_set_key(set_name, message_id)
-    #print(duplicate)
     if duplicate == 0:
         logger.info("processing ends. Duplicate message", extra={"path": method_name})
-        #print(f"Skipping duplicate message: {message_id}")
         return True

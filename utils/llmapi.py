@@ -6,7 +6,6 @@ import logging
 
 app_name = config.APP_NAME
 logger = logging.getLogger(app_name)
-#logger.info("Valid Repliq token present in request. Redirecting to dashboard.", extra={"path": method_name})
 
 os.environ["GEMINI_API_KEY"] = config.GEMINI_API_KEY
 
@@ -51,7 +50,6 @@ def extract_text_from_messages(messages:dict):
 def remove_extra_text_from_llm_response(text):
     method_name = "remove_extra_text_from_llm_response"
     logger.info("processing begins.", extra={"path": method_name})
-    #print(text)
     match = re.search(r"---\s*(.*?)\s*---", text, re.DOTALL)
 
     if match:
@@ -60,7 +58,6 @@ def remove_extra_text_from_llm_response(text):
         return extracted
     else:
         logger.info("processing ends with nothign to extract from LLM response.", extra={"path": method_name})
-        #print("No match found")
 
 
 def get_draft(writing_style, email_message_text):

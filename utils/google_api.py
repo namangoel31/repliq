@@ -15,7 +15,6 @@ import email
 
 app_name = config.APP_NAME
 logger = logging.getLogger(app_name)
-#logger.info("Valid Repliq token present in request. Redirecting to dashboard.", extra={"path": method_name})
 
 thread_pairs=[]
 
@@ -27,7 +26,6 @@ def fetch_threads_in_batches(service, thread_ids, batch_size=50):
     def callback(request_id, response, exception):
         if exception:
             logger.exception("processign ends with en Exception: %s", str(exception), extra={"path": method_name})
-            #print(f"Error for {request_id}: {exception}")
         else:
             all_threads[response['id']] = response
 
@@ -154,7 +152,6 @@ def save_draft(db,result):
     message_details = handle_pubsub_notification(db, result, service)
     if not message_details:
         logger.info("No new messages", extra={'path': method_name})
-        #print("from saveDraft.py: No new messages")
         return
     original_message = message_details['original_msg']
     message_body_text = message_details['body_text']
@@ -165,13 +162,9 @@ def save_draft(db,result):
 
     if sender_email == user.email:
         logger.info("Skipping won messages.", extra={'path': method_name})
-        #print("Skipping my own email.")
         return
 
-    #print(message_body_text)
     draft = get_draft(writingStyle, message_body_text)
-    #print(draft)
-
 
     original_subject = headers.get('Subject', '')
     original_from = headers.get('From')
@@ -192,8 +185,6 @@ def save_draft(db,result):
 
     raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
 
-    #print(message, raw_message)
-    # Create draft
     draft = service.users().drafts().create(
         userId="me",
         body={
