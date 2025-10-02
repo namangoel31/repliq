@@ -5,3 +5,5 @@ service_account.json
 __pycache__
 gcloud_setup.txt
 ngrok_info.txt
+todo
+app.log
