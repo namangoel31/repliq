@@ -1,6 +1,10 @@
 import redis
 import os
 import config
+import logging
+
+app_name = config.APP_NAME
+logger = logging.getLogger(app_name)
 
 redis_connection = None
 
@@ -15,21 +19,31 @@ def get_redis_connection():
     return redis_connection
 
 def set_hash_key(hash_name, field, value):
+    method_name = 'set_hash_key'
+    logger.info("processing begins.", extra = {'path': method_name})
     try:
         r = get_redis_connection()
         r.hset(hash_name, field, value)
+        logger.info("processing ends.", extra = {'path': method_name})
     except Exception as ex:
-        print(ex)
+        logger.exception("processing ends with an exception: %s", ex, extra = {'path': method_name} )
+        #print(ex)
 
 def get_hash_key(hash_name, field):
+    method_name = 'get_hash_key'
+    logger.info("processing begins.", extra = {'path': method_name})
     try:
         r = get_redis_connection()
         value = r.hget(hash_name, field)
+        logger.info("processing ends.", extra = {'path': method_name})
         return value
     except Exception as ex:
-        print(ex)
+        logger.exception("processing ends with an exception: %s", ex, extra={"path": method_name})
+        #print(ex)
 
 def set_set_key(set_name, value, ttl=3600):
+    method_name = 'set_set_key'
+    logger.info("processing begins.", extra = {'path': method_name})
     try:
         r = get_redis_connection()
         pipeline = r.pipeline()
@@ -39,8 +53,10 @@ def set_set_key(set_name, value, ttl=3600):
             pipeline.expire(set_name, ttl)
 
         results = pipeline.execute()
-        was_added = results[0]  
+        was_added = results[0]
+        logger.info("processing ends.", extra = {'path': method_name})
         return was_added
     except Exception as ex:
-        print(ex)
+        logger.exception("processing ends with an exception: %s", ex, extra={"path": method_name})
+        #print(ex)
         return -1

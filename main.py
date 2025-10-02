@@ -21,11 +21,16 @@ from utils.repliq_token import get_current_user, create_custom_token
 from utils.google_api import fetch_threads_in_batches, fetch_my_replies, save_draft
 from utils.llmapi import get_writing_style
 from utils.googlePubSub import create_watch_request, verify_incoming_request, decode_push_notification_data, handle_pubsub_notification, stop_watch_request
+from utils.logger import get_console_logger, get_file_logger
 
 models.Base.metadata.create_all(bind = engine)
 
+app_name = config.APP_NAME
+
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
+# logger = get_console_logger()
+logger = get_file_logger(app_name)
 
 GOOGLE_AUTH_URL = config.GOOGLE_AUTH_URL
 GOOGLE_TOKEN_URL = config.GOOGLE_TOKEN_URL 
@@ -46,11 +51,13 @@ results = []
 
 @app.get("/", response_class=HTMLResponse)
 def root(request: Request, db: Session = Depends(get_db)):
+    path = "/"
     repliq_token = request.cookies.get("repliq_token")
     if repliq_token:
         email = get_current_user(repliq_token).sub
         user = db.query(models.user).filter(models.user.email == email).first()
         if repliq_token and email and user:
+            logger.info("Valid Repliq token present in request. Redirecting to dashboard.", extra={"path": path})
             return RedirectResponse("/dashboard")
 
     state = secrets.token_urlsafe(16)
@@ -74,8 +81,10 @@ def root(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/auth/google")
 async def auth_google(request: Request, state:str, code: str, db: Session = Depends(get_db)):
+    path = "/auth/google"
     cookie_state = request.cookies.get("oauth_state")
     if not cookie_state or cookie_state != state:
+        logger.exception("Exception occured: %s", str(HTTPException(status_code=400, detail="Invalid or missing state")), extra={"path": path})
         raise HTTPException(status_code=400, detail="Invalid or missing state")
     data = {
         "code": code,
@@ -92,12 +101,14 @@ async def auth_google(request: Request, state:str, code: str, db: Session = Depe
     access_token = token_response.get("access_token")
     refresh_token = token_response.get("refresh_token")
     if not refresh_token:
+        logger.exception("Exception occured: %s", str(HTTPException(status_code=400, detail="No refresh token received. User must re-consent.")), extra={"path": path})
         raise HTTPException(
             status_code=400,
             detail="No refresh token received. User must re-consent."
         )
 
     if not id_token:
+        logger.exception("Exception occured: %s", str(HTTPException(status_code=400, detail="No ID token returned")), extra={"path": path})
         raise HTTPException(status_code=400, detail="No ID token returned")
 
     jwks_client = PyJWKClient(GOOGLE_JWKS_URL)
@@ -142,7 +153,6 @@ async def auth_google(request: Request, state:str, code: str, db: Session = Depe
     set_hash_key(hashKey, cacheKey, access_token)
 
     hashKey = "repliq:google:access_token:fetched_at"
-    cacheKey = email
     set_hash_key(hashKey, cacheKey, token_fetched_at)
 
     repliq_token = create_custom_token(email)
@@ -154,13 +164,15 @@ async def auth_google(request: Request, state:str, code: str, db: Session = Depe
         max_age=60*60*24*7,  # 7 days
     )
     response.delete_cookie("oauth_state")
-
+    logger.info("Login with Google successful.", extra={"path": path})
     return response
 
 @app.get("/dashboard")
 async def dashboard(request: Request, db: Session = Depends(get_db)):
+    path = "/dashboard"
     repliq_token = request.cookies.get("repliq_token")
     if not repliq_token:
+        logger.info("Token not found in request. Redirecting to login page.", extra={"path": path})
         return RedirectResponse("/")
 
     user = get_current_user(repliq_token)
@@ -168,6 +180,7 @@ async def dashboard(request: Request, db: Session = Depends(get_db)):
     user_obj = db.query(models.user).filter(models.user.email == email).first()
 
     if not refresh_google_access_token(email, user_obj.google_refresh_token, db):
+        logger.info("Unable to fetch refresh token. User must revalidate.", extra={"path": path})
         response = RedirectResponse("/")  # redirect to your dashboard
         response.delete_cookie("repliq_token")
         return response
@@ -239,9 +252,12 @@ async def dashboard(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/gmail/generate_writing_style")
 async def get_messages(request: Request, db: Session = Depends(get_db), max_results: int = 10):
-    print("inside batch")
+    path = "/gmail/generate_writing_style"
+    #print("Generating writing style for user")
+    logger.info("Generating writing style for user.", extra={"path": path})
     repliq_token = request.cookies.get("repliq_token")
     if not repliq_token:
+        logger.info("Token not found in request. Redirecting to login page.", extra={"path": path})
         return RedirectResponse("/")
     
     user = get_current_user(repliq_token)
@@ -257,6 +273,7 @@ async def get_messages(request: Request, db: Session = Depends(get_db), max_resu
     if is_google_token_expired(email):
         access_code = refresh_google_access_token(email, refresh_token, db)
         if not access_code:
+            logger.error("An error occuered while trying to refresh token", extra={"path": path})
             return {"message": "An error occuered while trying to refresh token"}
     
     style = db.query(models.writing_style).filter(models.writing_style.user_id == user.id).first()
@@ -272,7 +289,8 @@ async def get_messages(request: Request, db: Session = Depends(get_db), max_resu
                 "scopes": ["https://www.googleapis.com/auth/gmail.readonly"]
             }
         )
-        print("creds fetched. making batch call")
+        #print("creds fetched. making batch call")
+        logger.info("Fetched user creds. Making bacth call for sent emails.", extra={"path": path})
 
         service = build("gmail", "v1", credentials=creds)
 
@@ -288,15 +306,19 @@ async def get_messages(request: Request, db: Session = Depends(get_db), max_resu
             db.add(style)
             db.commit()
             db.refresh(style)
+            logger.info("Writing style generated.", extra={"path": path})
         except ServerError as ex:
-            print(ex)
+            logger.exception("Exception occured: %s", str(ex), extra={"path": path})
+            #print(ex)
 
     return RedirectResponse("/dashboard")
 
 @app.get("/gmail/toggle_watch")
 def toggle_watch(request: Request, db: Session = Depends(get_db)):
+    path = "/gmail/toggle_watch"
     repliq_token = request.cookies.get("repliq_token")
     if not repliq_token:
+        logger.info("Repliq token not found in request. Redirecting to login page.", extra={"path": path})
         return RedirectResponse("/")
     
     user = get_current_user(repliq_token)
@@ -312,6 +334,7 @@ def toggle_watch(request: Request, db: Session = Depends(get_db)):
     if is_google_token_expired(email):
         access_code = refresh_google_access_token(email, refresh_token, db)
         if not access_code:
+            logger.error("An error occuered while trying to refresh token", extra={"path": path})
             return {"message": "An error occuered while trying to refresh token"}
     if not user.watch_status:
         create_watch_request(access_code, refresh_token, email, db)
@@ -323,6 +346,7 @@ def toggle_watch(request: Request, db: Session = Depends(get_db)):
 
 @app.post("/push")
 async def push(request: Request,  background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    path = "/push"
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=403, detail="Missing or invalid Authorization header")
@@ -332,18 +356,22 @@ async def push(request: Request,  background_tasks: BackgroundTasks, db: Session
 
     body = await request.json()
     if config.DRAIN_NOTIFICATIONS:
-        print("\nDiscarding incoming notification!\n")
-    print("📩 Pub/Sub notification received:", body)
+        logger.info("Discarding incoming notification!", extra={"path": path})
+        #print("\nDiscarding incoming notification!\n")
+    #print("📩 Pub/Sub notification received:", body)
     result = decode_push_notification_data(body)
-    print(result)
+    logger.info("Decoded push notification: %s", result, extra={"path": path})
+    #print(result)
     background_tasks.add_task(save_draft, db, result)
 
     return {"status": "ok"}
 
 @app.get("/gmail/logout")
 def logout_and_revoke_token(request: Request, db: Session = Depends(get_db)):
+    path = "/gmail/logout"
     repliq_token = request.cookies.get("repliq_token")
     if not repliq_token:
+        logger.info("Repliq token not found. Redirecting to dashboard", extra={"path": path})
         return RedirectResponse("/")
     
     user = get_current_user(repliq_token)
@@ -373,19 +401,37 @@ def logout_and_revoke_token(request: Request, db: Session = Depends(get_db)):
             headers={"content-type": "application/x-www-form-urlencoded"}
         )
         if response.status_code == 200:
-            print("Token revoked successfully.")
+            #print("Token revoked successfully.")
+            logger.info("User's token revoked successfully.", extra={"path": path})
             response = RedirectResponse("/")
             response.delete_cookie("repliq_token")
             return response
         else:
-            print(f"Failed to revoke token: {response.status_code}, {response.text}")
+            #print(f"Failed to revoke token: {response.status_code}, {response.text}")
+            logger.info("User's token revoke unsuccessful.", extra={"path": path})
             response = RedirectResponse("/dashboard")
             return response
     except Exception as e:
-        print(f"Error revoking token: {e}")
+        #print(f"Error revoking token: {e}")
+        logger.exception("Exception occured while trying to revoke Gamil access token: %s", str(e), extra={"path": path})
         response = RedirectResponse("/dashboard")
         return response
 
 def handle_response(request_id, response, exception):
     if exception is None:
         results.append(response)
+
+def get_user_obj(db: Session, email: str):
+    ...
+
+def update_user_obj(db: Session, email: str):
+    ...
+
+def get_google_access_code(db: Session, email: str):
+    ...
+
+def get_writing_style(db: Session, email: str):
+    ...
+
+def set_writing_style(db: Session, email: str):
+    ...

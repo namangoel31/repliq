@@ -10,15 +10,24 @@ from email.utils import parseaddr
 from utils.cacheProvider import get_hash_key, set_hash_key
 from google.oauth2.credentials import Credentials
 import config
+import logging
+import email
+
+app_name = config.APP_NAME
+logger = logging.getLogger(app_name)
+#logger.info("Valid Repliq token present in request. Redirecting to dashboard.", extra={"path": method_name})
 
 thread_pairs=[]
 
 def fetch_threads_in_batches(service, thread_ids, batch_size=50):
+    method_name = "fetch_threads_in_batches"
+    logger.info("processing begins.", extra={"path": method_name})
     all_threads = {}
 
     def callback(request_id, response, exception):
         if exception:
-            print(f"Error for {request_id}: {exception}")
+            logger.exception("processign ends with en Exception: %s", str(exception), extra={"path": method_name})
+            #print(f"Error for {request_id}: {exception}")
         else:
             all_threads[response['id']] = response
 
@@ -28,19 +37,28 @@ def fetch_threads_in_batches(service, thread_ids, batch_size=50):
             batch.add(service.users().threads().get(userId="me", id=tid))
         batch.execute()
 
+    logger.info("processing ends", extra={"path": method_name})
     return all_threads
 
+
 def filter_ids(lst):
-    seen = set()
-    unique = []
-    for item in lst:
-        if item not in seen:
-            seen.add(item)
-            unique.append(item)
-    return unique
+    method_name = 'filter_ids'
+    try:
+        logger.info("processing beings.", extra={"path": method_name})
+        seen = set()
+        unique = []
+        for item in lst:
+            if item not in seen:
+                seen.add(item)
+                unique.append(item)
+        return unique
+    except Exception as ex:
+        logger.exception("processing ends with an Exception: %s", str(ex), extra={"path": method_name})
 
 
 def fetch_my_replies(service, user_email, batch_size=25):
+    method_name = 'fetch_my_replies'
+    logging.info("processing begins.", extra = {'path': method_name})
     sent_msgs = service.users().messages().list(userId="me", q="from:me in:sent", maxResults=batch_size).execute()
     sent_ids = [m["threadId"] for m in sent_msgs.get("messages", [])]
     results = []
@@ -50,6 +68,7 @@ def fetch_my_replies(service, user_email, batch_size=25):
     
     def callback(request_id, thread, exception):
         if exception:
+            logger.exception("processing ends with en Exception: %s", str(exception), extra={"path": method_name})
             return
 
         messages = sorted(thread["messages"], key=lambda m: int(m["internalDate"]))
@@ -62,39 +81,56 @@ def fetch_my_replies(service, user_email, batch_size=25):
         batch.add(service.users().threads().get(userId="me", id=thread_id, format="full"), callback=callback)
     batch.execute()
 
+    logger.info("processing ends.", extra={'path': method_name})
     return results
 
 def extract_text_from_message(msg):
-    import base64
-    import email
+    method_name = "extract_text_from_message"
+    logger.info("processing begins.", extra={'path': method_name})
 
     if 'parts' in msg['payload']:
         for part in msg['payload']['parts']:
             if part['mimeType'] == 'text/plain':
                 data = part['body']['data']
                 text = base64.urlsafe_b64decode(data).decode()
+                logger.info("processing ends.", extra={'path': method_name})
                 return text
 
     if 'body' in msg['payload'] and 'data' in msg['payload']['body']:
         data = msg['payload']['body']['data']
+        logger.info("processing ends.", extra={'path': method_name})
         return base64.urlsafe_b64decode(data).decode()
+    
+    logger.info("processing ends with nothing to extract from incoming message.", extra={'path': method_name})
     return ""
 
 def extract_text_from_message2(msg):
+    method_name = "extract_text_from_message2"
+    logger.info("processing begins.", extra={'path': method_name})
+
     if 'parts' in msg['payload']:
         for part in msg['payload']['parts']:
             if part['mimeType'] == 'text/plain':
                 data = part['body']['data']
+                logger.info("processing ends.", extra={'path': method_name})
                 return base64.urlsafe_b64decode(data).decode()
+            
     if 'body' in msg['payload'] and 'data' in msg['payload']['body']:
         data = msg['payload']['body']['data']
+        logger.info("processing ends.", extra={'path': method_name})
         return base64.urlsafe_b64decode(data).decode()
+    
+    logger.info("processing ends with nothing to extract from incoming message.", extra={'path': method_name})
     return ""
 
 
 def save_draft(db,result):
+    method_name = 'save_draft'
+    logger.info("processing begins.", extra={'path': method_name})
+
     user = db.query(models.user).filter(models.user.email == result['email_address']).first()
     if config.DRAIN_NOTIFICATIONS and user.email == result['email_address']:
+        logger.info("Discarding incoming notification. Toggle from config.py", extra={'path': method_name})
         return
     writingStyleObj = db.query(models.writing_style).filter(models.writing_style.user_id == user.id).first()
     writingStyle = writingStyleObj.style
@@ -117,7 +153,8 @@ def save_draft(db,result):
 
     message_details = handle_pubsub_notification(db, result, service)
     if not message_details:
-        print("from saveDraft.py: No new messages")
+        logger.info("No new messages", extra={'path': method_name})
+        #print("from saveDraft.py: No new messages")
         return
     original_message = message_details['original_msg']
     message_body_text = message_details['body_text']
@@ -127,12 +164,13 @@ def save_draft(db,result):
 
 
     if sender_email == user.email:
-        print("Skipping my own email.")
+        logger.info("Skipping won messages.", extra={'path': method_name})
+        #print("Skipping my own email.")
         return
 
     #print(message_body_text)
     draft = get_draft(writingStyle, message_body_text)
-    print(draft)
+    #print(draft)
 
 
     original_subject = headers.get('Subject', '')
@@ -165,3 +203,5 @@ def save_draft(db,result):
             }
         }
     ).execute()
+
+    logger.info("processing ends.", extra={'path': method_name})
