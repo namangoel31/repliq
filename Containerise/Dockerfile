@@ -21,7 +21,7 @@ RUN conda env create -f /tmp/environment.yml && conda clean -afy
 
 RUN mkdir /home/repliq
 
-ADD . /home/repliq/
+ADD ../. /home/repliq/
 
 WORKDIR /home/repliq
 
