@@ -13,7 +13,6 @@ sessionLocal = sessionmaker(autocommit = False,
                             bind = engine)
 
 Base = declarative_base()
-BaseMongo = declarative_base()
 
 def get_db():
     db = sessionLocal()
