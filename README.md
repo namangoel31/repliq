@@ -116,10 +116,22 @@ Once running, you can log in with Google, authorize the app, and start drafting 
 
 ---
 
+## 🛳️ Kubernetes manifest details
+### 🧩 Components:
+- Deployemnt
+- Service
+- HPA
+
+### 📒 Explanation:
+- Deployemnt makes sure our app is always running
+- Service exposes our app
+- HPA scales our app horizontally to cater incoming traffic. 
+
+
+---
+
 ## 📝 Roadmap
 - [ ] Add support for multiple email accounts per user  
 - [ ] Web UI for configuration and usage metrics  
 - [ ] LLM fine-tuning for improved personalization  
-- [✅] Deployment templates (Docker/Kubernetes)
-
-
+- [✅] Deployment templates (Kubernetes)
