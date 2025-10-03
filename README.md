@@ -116,6 +116,46 @@ Once running, you can log in with Google, authorize the app, and start drafting 
 
 ---
 
+# 📚 Repliq API Documentation
+
+Here are the main endpoints in Repliq:
+
+### `GET /`
+Landing page for the app.  
+- Allows users to log in with Google.
+
+### `GET /auth/google`
+Google OAuth redirect handler.  
+- Receives the **authorization code** from Google.  
+- Exchanges it for **access token** and **refresh token**.  
+- Used internally after login.
+
+### `GET /dashboard`
+Dashboard page showing account status and a simple UI.  
+- Displays current connection info.  
+- Allows actions like writing style generation or watch toggle.
+
+### `POST /gmail/generate_writing_style`
+Fetches the user’s **sent emails** and generates a **writing style profile**.  
+- Processes in the backend.  
+- Redirects to `/dashboard` when done.
+
+### `POST /gmail/toggle_watch`
+Enables or disables Gmail **watch request** for new emails.  
+- Redirects to `/dashboard`.
+
+### `POST /push`
+Webhook endpoint for **Google push notifications**.  
+- Receives Pub/Sub notifications for new emails.  
+- Not meant to be accessed manually.
+
+### `GET /gmail/logout`
+Logs the user out.  
+- Revokes Gmail **access & refresh tokens**.  
+- Redirects to `/`.
+
+---
+
 ## 🛳️ Kubernetes manifest details
 ### 🧩 Components:
 - Deployemnt

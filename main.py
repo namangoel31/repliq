@@ -191,7 +191,7 @@ async def dashboard(request: Request, db: Session = Depends(get_db)):
     )
 
 
-@app.get("/gmail/generate_writing_style")
+@app.post("/gmail/generate_writing_style")
 async def get_messages(request: Request, db: Session = Depends(get_db), max_results: int = 10):
     path = "/gmail/generate_writing_style"
     logger.info("Generating writing style for user.", extra={"path": path})
@@ -239,7 +239,7 @@ async def get_messages(request: Request, db: Session = Depends(get_db), max_resu
 
     return RedirectResponse("/dashboard")
 
-@app.get("/gmail/toggle_watch")
+@app.post("/gmail/toggle_watch")
 def toggle_watch(request: Request, db: Session = Depends(get_db)):
     path = "/gmail/toggle_watch"
     repliq_token = request.cookies.get("repliq_token")
