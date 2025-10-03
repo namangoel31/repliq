@@ -10,7 +10,6 @@ import logging
 
 app_name = config.APP_NAME
 logger = logging.getLogger(app_name)
-#logger.info("Valid Repliq token present in request. Redirecting to dashboard.", extra={"path": method_name})
 
 def is_google_token_expired(email: str) -> bool:
     method_name = "is_google_token_expired"
@@ -27,7 +26,6 @@ def is_google_token_expired(email: str) -> bool:
         return time.time() > fetched_at + config.GOOGLE_ACCESS_TOKEN_EXPIRE_SECONDS
     except Exception as e:
         logger.exception("processing ends with exception %s.", str(e), extra={"path": method_name})
-        #print(f"Error checking token expiry: {e}")
         return True
 
 def refresh_google_access_token(email: str, refresh_token: str, db: Session):
@@ -62,12 +60,9 @@ def refresh_google_access_token(email: str, refresh_token: str, db: Session):
     
     except requests.exceptions.HTTPError as e:
         logger.exception("processing ends with an exception: %s.", str(e), extra={"path": method_name})
-        #print(f"Failed to refresh access token: {e}")
-        #print("Response:", response.json())
         return False
     
     except Exception as e:
         logger.exception("processing ends with an exception: %s.", str(e), extra={"path": method_name})
-        #print("Exception occured: ", e)
         return False
     

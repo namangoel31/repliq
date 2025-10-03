@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    name: draftly-repliq
+  name: draftly-repliq
+  namespace: draftly-repliq
+spec:
+  selector:
+    matchLabels:
+      name: draftly-repliq
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: draftly-repliq
+    spec:
+      serviceAccountName: service-account
+      restartPolicy: Always
+      containers:
+      - name : repliq
+        image: repliqImage:latest"
+        imagePullPolicy: "Always"
+        env:
+        - name: GOOGLE_CLIENT_ID
+          value: ""
+        - name: GOOGLE_CLIENT_SECRET
+          value: ""
+        - name: GOOGLE_REDIRECT_URI
+          value: "http://localhost:8000/auth/google"
+        - name: APP_NAME
+          value: 'repliq'
+        - name: GEMINI_API_KEY
+          value: ""
+        - name: VERIFICATION_TOKEN
+          value: "some_verification_token"
+        - name: SECRET_KEY
+          value: "supersecretkey"
+        - name: SQL_ALCHEMY_DATABASE_URL
+          value: ""
+        - name: SQL_ALCHEMY_MONGO_URL
+          value: ""
+        - name: CACHE_SERVER_ENDPOINT
+          value: ""
+        - name: CACHE_SERVER_PORT
+          value: ""
+        - name: CACHE_SERVER_PASSWORD
+          value: ""
+        - name: APP_DOMAIN
+          value: ""
+        - name: PUBSUB_TOPIC_NAME
+          value: "/topics/gmail-notifications"
+        - name: DRAIN_NOTIFICATIONS
+          value: "False"
+        - name: GMAIL_WATCH_VERIFICATION_TOKEN
+          value: "my-secret-token-123"
+        ports:
+        - containerPort: 8000
+          protocol: TCP
+        resources:
+          requests:
+            memory: "4000Mi"
+            cpu: "2000m"
+          limits:
+            memory: "4000Mi"
+            cpu: "2000m"
+        command:
+        - "/bin/sh"
+        - "-c"
+        - "--"
+        args :
+        - '/home/start-nginx.sh'
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: draftly-repliq
+  namespace: draftly-repliq
+  labels:
+    name: draftly-repliq
+spec:
+  ports:
+  - name: draftly-repliq
+    port: 8000
+    protocol: TCP
+    targetPort: 8000
+  selector:
+    name: draftly-repliq
+  type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: draftly-repliq-hpa
+  namespace: draftly-repliq
+  labels:
+    name: draftly-repliq-hpa
+spec:
+  minReplicas: 1
+  maxReplicas: 10
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: draftly-repliq
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 90
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 90

@@ -2,7 +2,7 @@ import logging
 
 def get_console_logger(name="repliq"):
     logger = logging.getLogger(name)
-    if not logger.hasHandlers():  # avoid adding multiple handlers
+    if not logger.hasHandlers():
         console_handler = logging.StreamHandler()
         formatter = logging.Formatter(
             '%(asctime)s - %(levelname) - %(name)s - %(path)ss - %(message)s'

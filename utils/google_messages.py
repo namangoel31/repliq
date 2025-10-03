@@ -6,7 +6,6 @@ import logging
 
 app_name = config.APP_NAME
 logger = logging.getLogger(app_name)
-#logger.info("Valid Repliq token present in request. Redirecting to dashboard.", extra={"path": method_name})
 
 def parse_message(msg):
     method_name = 'parse_message'
@@ -121,7 +120,6 @@ def clean_message_body(message):
 def create_threads_preserve_breaks(messages, email):
     method_name = "create_threads_preserve_breaks"
     logger.info("processing begins.", extra = {'path': method_name})
-    #print(messages)
     threads = []
     thread = {}
     for message in messages:
